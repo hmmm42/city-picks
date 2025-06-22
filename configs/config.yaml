@@ -1,0 +1,21 @@
+server:
+  RunMode: debug
+  Port: 10000
+  ReadTimeout: 60
+  WriteTimeout: 60
+
+mysql:
+  User: root
+  Password: root
+  Host: localhost
+  Port: 3307
+  DBname: city_picks
+  MaxIdleConns: 30
+  MaxOpenConns: 100
+
+log:
+  Filename: ../app.log
+  level: debug
+  MaxSize: 10
+  MaxBackups: 10
+  MaxAge: 30
