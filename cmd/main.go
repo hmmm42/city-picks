@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/hmmm42/city-picks/internal/config"
-	"github.com/hmmm42/city-picks/pkg/logger"
 	"github.com/spf13/pflag"
 )
 
@@ -14,7 +13,6 @@ func init() {
 	pflag.Parse()
 
 	config.InitConfig(*configPath)
-	logger.InitLogger(config.LogOptions)
 }
 
 func main() {

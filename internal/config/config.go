@@ -56,6 +56,8 @@ func InitConfig(path string) {
 		if err := ReadSection("log", &LogOptions); err != nil {
 			panic("Failed to read log config: " + err.Error())
 		}
+
+		logger.InitLogger(LogOptions)
 	})
 }
 
