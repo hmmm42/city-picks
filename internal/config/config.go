@@ -99,7 +99,7 @@ func reloadAllSections() error {
 
 // 定义配置文件的相对路径
 const configFileName = "config.yaml"
-const configDirPath = "../configs" // 配置文件所在的目录名，相对于项目根目录
+const configDirPath = "./configs" // 配置文件所在的目录名，相对于项目根目录
 func GetDefaultConfigPath() string {
 	projectRoot, err := getProjectRoot()
 	if err != nil {
