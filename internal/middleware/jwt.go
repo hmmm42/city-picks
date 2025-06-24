@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"crypto/sha1"
 	"log/slog"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 )
 
 type UserClaims struct {
-	Phone string
+	UserID uint64 `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -20,11 +19,9 @@ func getJWTSecret() []byte {
 	return []byte(config.JWTOptions.Secret)
 }
 
-func GenerateToken(phone string) (string, error) {
-	hash := sha1.New()
-	hash.Write([]byte(phone))
+func GenerateToken(userID uint64) (string, error) {
 	claims := UserClaims{
-		Phone: string(hash.Sum(nil)),
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(config.JWTOptions.Expire)),
 			Issuer:    config.JWTOptions.Issuer,
@@ -63,6 +60,8 @@ func JWT() gin.HandlerFunc {
 			_, err := ParseToken(token)
 			if err != nil {
 				ecode = code.ErrTokenInvalid
+			} else {
+				c.Set("user_id", token)
 			}
 		}
 		if ecode != code.ErrSuccess {

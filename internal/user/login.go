@@ -16,6 +16,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/middleware"
 	"github.com/hmmm42/city-picks/pkg/code"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 const (
@@ -95,13 +96,9 @@ func loginCode(c *gin.Context, login LoginRequest) {
 		return
 	}
 	u := query.TbUser
-	count, err := u.Where(u.Phone.Eq(login.Phone)).Count()
-	if err != nil {
-		slog.Error("find by phone bad", "err", err)
-		code.WriteResponse(c, code.ErrDatabase, nil)
-		return
-	}
-	if count == 0 {
+	user, err := u.Where(u.Phone.Eq(login.Phone)).Select(u.ID).First()
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = u.Create(&model.TbUser{
 			Phone:    login.Phone,
 			NickName: UserNickNamePrefix + strconv.Itoa(rand.Intn(100000)),
@@ -111,27 +108,39 @@ func loginCode(c *gin.Context, login LoginRequest) {
 			code.WriteResponse(c, code.ErrDatabase, "create user failed")
 			return
 		}
+
+		generateTokenResponse(c, user.ID)
+		return
 	}
-	generateTokenResponse(c, login.Phone)
+
+	if err != nil {
+		slog.Error("find by phone bad", "err", err)
+		code.WriteResponse(c, code.ErrDatabase, nil)
+		return
+	}
+
+	generateTokenResponse(c, user.ID)
 }
 
 func loginPassword(c *gin.Context, login LoginRequest) {
 	u := query.TbUser
-	count, err := u.Where(u.Phone.Eq(login.Phone)).Count()
+	user, err := u.Where(u.Phone.Eq(login.Phone), u.Password.Eq(login.CodeOrPwd)).Select(u.ID).First()
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		code.WriteResponse(c, code.ErrPasswordIncorrect, "phone or password is incorrect")
+		return
+	}
 	if err != nil {
 		slog.Error("find by phone and password bad", "err", err)
 		code.WriteResponse(c, code.ErrDatabase, nil)
 		return
 	}
-	if count == 0 {
-		code.WriteResponse(c, code.ErrPasswordIncorrect, "phone or password is incorrect")
-		return
-	}
-	generateTokenResponse(c, login.Phone)
+
+	generateTokenResponse(c, user.ID)
 }
 
-func generateTokenResponse(c *gin.Context, phone string) {
-	token, err := middleware.GenerateToken(phone)
+func generateTokenResponse(c *gin.Context, userID uint64) {
+	token, err := middleware.GenerateToken(userID)
 	if err != nil {
 		slog.Error("generate token failed", "err", err)
 		code.WriteResponse(c, code.ErrTokenGenerationFailed, nil)
