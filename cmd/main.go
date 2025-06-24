@@ -40,6 +40,7 @@ func main() {
 		Addr:    ":" + config.ServerOptions.Port,
 		Handler: r,
 	}
+	slog.Info("Listening on " + config.ServerOptions.Port)
 	go func() {
 		err := server.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -51,7 +52,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	slog.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -59,5 +59,4 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		panic(err)
 	}
-	slog.Info("Server gracefully stopped")
 }

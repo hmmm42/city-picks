@@ -17,6 +17,7 @@ var (
 	MySQLOptions  *MySQLSetting
 	RedisOptions  *RedisSetting
 	LogOptions    *logger.LogSettings
+	JWTOptions    *JWTSetting
 )
 
 type ServerSetting struct {
@@ -42,6 +43,12 @@ type RedisSetting struct {
 	PoolSize int
 }
 
+type JWTSetting struct {
+	Secret string
+	Issuer string
+	Expire time.Duration
+}
+
 //func init() {
 //	InitConfig()
 //}
@@ -59,7 +66,9 @@ func InitConfig(path string) {
 			"mysql":  &MySQLOptions,
 			"redis":  &RedisOptions,
 			"log":    &LogOptions,
+			"jwt":    &JWTOptions,
 		})
+		JWTOptions.Secret = viper.Get("jwt.Secret").(string)
 
 		logger.InitLogger(LogOptions)
 	})
@@ -67,10 +76,11 @@ func InitConfig(path string) {
 
 func readConfigFile(path string) error {
 	viper.SetConfigFile(path)
+	_ = viper.BindEnv("jwt.Secret", "JWT_SECRET")
+	viper.AutomaticEnv()
 	if err := viper.ReadInConfig(); err != nil {
 		return err
 	}
-
 	viper.WatchConfig()
 	// 热更新: 用于更新日志等级
 	viper.OnConfigChange(func(in fsnotify.Event) {

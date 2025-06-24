@@ -13,6 +13,7 @@ import (
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/dal/query"
 	"github.com/hmmm42/city-picks/internal/db"
+	"github.com/hmmm42/city-picks/internal/middleware"
 	"github.com/hmmm42/city-picks/pkg/code"
 	"github.com/redis/go-redis/v9"
 )
@@ -65,6 +66,10 @@ func Login(c *gin.Context) {
 	switch login.LoginMethod {
 	case "phone":
 		loginCode(c, login)
+	case "password":
+		loginPassword(c, login)
+	default:
+		code.WriteResponse(c, code.ErrValidation, "invalid login_method")
 	}
 }
 
@@ -107,5 +112,32 @@ func loginCode(c *gin.Context, login LoginRequest) {
 			return
 		}
 	}
-	code.WriteResponse(c, code.ErrSuccess, "login success")
+	generateTokenResponse(c, login.Phone)
+}
+
+func loginPassword(c *gin.Context, login LoginRequest) {
+	u := query.TbUser
+	count, err := u.Where(u.Phone.Eq(login.Phone)).Count()
+	if err != nil {
+		slog.Error("find by phone and password bad", "err", err)
+		code.WriteResponse(c, code.ErrDatabase, nil)
+		return
+	}
+	if count == 0 {
+		code.WriteResponse(c, code.ErrPasswordIncorrect, "phone or password is incorrect")
+		return
+	}
+	generateTokenResponse(c, login.Phone)
+}
+
+func generateTokenResponse(c *gin.Context, phone string) {
+	token, err := middleware.GenerateToken(phone)
+	if err != nil {
+		slog.Error("generate token failed", "err", err)
+		code.WriteResponse(c, code.ErrTokenGenerationFailed, nil)
+		return
+	}
+	code.WriteResponse(c, code.ErrSuccess, gin.H{
+		"token": token,
+	})
 }

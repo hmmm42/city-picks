@@ -5,6 +5,7 @@ func init() {
 	register(ErrUnknown, 500, "Internal server error")
 	register(ErrBind, 400, "Error occurred while binding the request body to the struct")
 	register(ErrValidation, 400, "Validation failed")
+	register(ErrHttpHeaderInvalid, 400, "http header invalid")
 	register(ErrTokenInvalid, 401, "Token invalid")
 	register(ErrDatabase, 500, "Database error")
 	register(ErrEncrypt, 401, "Error occurred while encrypting the user password")
@@ -22,4 +23,6 @@ func init() {
 	register(ErrInvalidYaml, 500, "Data is not valid Yaml")
 	register(ErrEncodingYaml, 500, "Yaml data could not be encoded")
 	register(ErrDecodingYaml, 500, "Yaml data could not be decoded")
+	register(ErrTokenGenerationFailed, 500, "Token generation failed")
+
 }
