@@ -1,9 +1,18 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/hmmm42/city-picks/internal/config"
+	"github.com/hmmm42/city-picks/internal/db"
+	"github.com/hmmm42/city-picks/internal/router"
 	"github.com/spf13/pflag"
 )
 
@@ -13,9 +22,42 @@ func init() {
 	pflag.Parse()
 
 	config.InitConfig(*configPath)
+
+	var err error
+	db.DBEngine, err = db.NewMySQL(config.MySQLOptions)
+	if err != nil {
+		panic(err)
+	}
+	db.RedisClient, err = db.NewRedisClient(config.RedisOptions)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {
-	slog.Info("test", "user_id", 123)
-	slog.Error(config.MySQLOptions.DBName)
+	r := router.NewRouter()
+	server := &http.Server{
+		Addr:    ":" + config.ServerOptions.Port,
+		Handler: r,
+	}
+	go func() {
+		err := server.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	slog.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		panic(err)
+	}
+	slog.Info("Server gracefully stopped")
 }

@@ -1,6 +1,6 @@
 server:
   RunMode: debug
-  Port: 10000
+  Port: 14530
   ReadTimeout: 60
   WriteTimeout: 60
 
@@ -19,3 +19,8 @@ log:
   MaxSize: 10
   MaxBackups: 10
   MaxAge: 30
+
+redis:
+  Host: localhost
+  Port: 6379
+  PoolSize: 20

@@ -15,6 +15,7 @@ import (
 var (
 	ServerOptions *ServerSetting
 	MySQLOptions  *MySQLSetting
+	RedisOptions  *RedisSetting
 	LogOptions    *logger.LogSettings
 )
 
@@ -35,6 +36,12 @@ type MySQLSetting struct {
 	MaxOpenConns int
 }
 
+type RedisSetting struct {
+	Host     string
+	Port     string
+	PoolSize int
+}
+
 //func init() {
 //	InitConfig()
 //}
@@ -47,15 +54,12 @@ func InitConfig(path string) {
 			panic("Failed to read config file: " + err.Error())
 		}
 
-		if err := ReadSection("server", &ServerOptions); err != nil {
-			panic("Failed to read server config: " + err.Error())
-		}
-		if err := ReadSection("mysql", &MySQLOptions); err != nil {
-			panic("Failed to read MySQL config: " + err.Error())
-		}
-		if err := ReadSection("log", &LogOptions); err != nil {
-			panic("Failed to read log config: " + err.Error())
-		}
+		initSettings(map[string]any{
+			"server": &ServerOptions,
+			"mysql":  &MySQLOptions,
+			"redis":  &RedisOptions,
+			"log":    &LogOptions,
+		})
 
 		logger.InitLogger(LogOptions)
 	})
@@ -68,6 +72,7 @@ func readConfigFile(path string) error {
 	}
 
 	viper.WatchConfig()
+	// 热更新: 用于更新日志等级
 	viper.OnConfigChange(func(in fsnotify.Event) {
 		_ = reloadAllSections()
 		level := viper.GetString("LogLevel")
@@ -77,6 +82,14 @@ func readConfigFile(path string) error {
 }
 
 var sections = make(map[string]any)
+
+func initSettings(settings map[string]any) {
+	for key, setting := range settings {
+		if err := ReadSection(key, setting); err != nil {
+			panic(fmt.Sprintf("Failed to read %s config: %s", key, err.Error()))
+		}
+	}
+}
 
 func ReadSection(key string, v any) error {
 	err := viper.UnmarshalKey(key, v)

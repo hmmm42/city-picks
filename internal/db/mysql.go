@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 
+	"github.com/hmmm42/city-picks/dal/query"
 	"github.com/hmmm42/city-picks/internal/config"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -30,5 +31,7 @@ func NewMySQL(config *config.MySQLSetting) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
 
+	// 设置了才能使用 query 包
+	query.SetDefault(db)
 	return db, nil
 }
