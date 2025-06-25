@@ -34,6 +34,9 @@ func NewRouter() *gin.Engine {
 		protected.POST("/shop/create", shopservice.CreateShop)
 		protected.POST("/shop/update", shopservice.UpdateShop)
 		protected.DELETE("/shop/:id", shopservice.DeleteShop)
+
+		protected.POST("/voucher/create", shopservice.CreateVoucher)
+		protected.POST("/voucher/seckill", shopservice.SeckillVoucher)
 	}
 	return r
 }
