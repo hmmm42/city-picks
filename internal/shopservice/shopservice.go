@@ -1,10 +1,14 @@
 package shopservice
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"math/rand"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hmmm42/city-picks/dal/model"
@@ -12,13 +16,18 @@ import (
 	"github.com/hmmm42/city-picks/internal/db"
 	"github.com/hmmm42/city-picks/pkg/code"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
 const (
 	ShopKeyPrefix = "cache:shop:"
 	ShopTypeKey   = "cache:shopType:"
+	CacheNullTTL  = 10 * time.Minute
+	CacheShopTTL  = 2 * time.Hour
 )
+
+var sg singleflight.Group
 
 func QueryShopByID(c *gin.Context) {
 	idStr := c.Param("id")
@@ -27,55 +36,69 @@ func QueryShopByID(c *gin.Context) {
 		return
 	}
 
+	shop, err, _ := sg.Do(idStr, func() (any, error) {
+		return queryShopByIDSingle(c, idStr)
+	})
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		code.WriteResponse(c, code.ErrDatabase, "Shop not found")
+	} else if err != nil {
+		code.WriteResponse(c, code.ErrDatabase, nil)
+	} else {
+		code.WriteResponse(c, code.ErrSuccess, shop)
+	}
+}
+
+func queryShopByIDSingle(c context.Context, idStr string) (any, error) {
+	slog.Debug("Querying shop by ID", "id", idStr)
+
 	shopGot, err := db.RedisClient.Get(c, ShopKeyPrefix+idStr).Result()
 	if err == nil {
-		slog.Info("Cache hit for shop ID", "id", idStr)
+		if shopGot == "" {
+			return "", fmt.Errorf("%w: shop not found for ID %s", gorm.ErrRecordNotFound, idStr)
+		}
+
 		var shop model.TbShop
 		err = json.Unmarshal([]byte(shopGot), &shop)
 		if err != nil {
 			slog.Error("Failed to decode shop data from cache", "err", err)
-			code.WriteResponse(c, code.ErrDecodingJSON, "Failed to decode shop data from cache")
-		} else {
-			code.WriteResponse(c, code.ErrSuccess, shop)
 		}
-		return
+		return shop, nil
 	}
 	if !errors.Is(err, redis.Nil) {
-		code.WriteResponse(c, code.ErrDatabase, nil)
-		return
+		slog.Error("Failed to get shop from Redis", "err", err)
+		return "", err
 	}
 
-	slog.Warn("Cache miss for shop ID", "id", idStr)
+	slog.Warn("Cache miss for shop ID, querying database", "id", idStr)
 	shopQuery := query.TbShop
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		code.WriteResponse(c, code.ErrValidation, "Invalid Shop ID format")
-		return
-	}
+	id, _ := strconv.Atoi(idStr)
 	shop, err := shopQuery.Where(shopQuery.ID.Eq(uint64(id))).First()
+
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		code.WriteResponse(c, code.ErrDatabase, "Shop not found")
-		return
+		// 缓存 null 值，避免频繁查询数据库, 防止缓存穿透
+		_, _ = db.RedisClient.Set(c, ShopKeyPrefix+idStr, "", CacheNullTTL).Result()
+		return "", fmt.Errorf("%w: shop not found for ID %s", gorm.ErrRecordNotFound, idStr)
 	}
 	if err != nil {
 		slog.Error("Failed to query shop from database", "err", err)
-		code.WriteResponse(c, code.ErrDatabase, nil)
-		return
+		return "", err
 	}
 
 	shopMarshalled, err := json.Marshal(shop)
 	if err != nil {
 		slog.Error("Failed to marshal shop data", "err", err)
-		code.WriteResponse(c, code.ErrEncodingJSON, "Failed to encode shop data")
-		return
+		return nil, err
 	}
-	_, err = db.RedisClient.Set(c, ShopKeyPrefix+idStr, shopMarshalled, 0).Result()
+
+	// 添加随机延迟，避免缓存雪崩
+	_, err = db.RedisClient.Set(c, ShopKeyPrefix+idStr, shopMarshalled, CacheShopTTL+time.Duration(rand.Int31n(10000))).Result()
 	if err != nil {
 		slog.Error("Failed to cache shop data", "err", err)
-		code.WriteResponse(c, code.ErrDatabase, nil)
-		return
+		return "", err
 	}
-	code.WriteResponse(c, code.ErrSuccess, shop)
+
+	return shop, nil
 }
 
 func QueryShopTypeList(c *gin.Context) {
