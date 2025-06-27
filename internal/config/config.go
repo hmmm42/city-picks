@@ -79,10 +79,30 @@ func NewOptions() (*Options, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// 将读取到的配置赋值给全局变量
+	ServerOptions = opts.Server
+	MySQLOptions = opts.MySQL
+	RedisOptions = opts.Redis
+	LogOptions = opts.Log
+	JWTOptions = opts.JWT
+
 	// 配置热更新逻辑
 	vp.WatchConfig()
 	vp.OnConfigChange(func(in fsnotify.Event) {
 		slog.Info("Config file changed:", "event", in.Name)
+		// 重新加载所有配置到全局变量
+		var updatedOpts Options
+		if err := vp.Unmarshal(&updatedOpts); err != nil {
+			slog.Error("Failed to re-unmarshal config on change:", "err", err)
+			return
+		}
+		ServerOptions = updatedOpts.Server
+		MySQLOptions = updatedOpts.MySQL
+		RedisOptions = updatedOpts.Redis
+		LogOptions = updatedOpts.Log
+		JWTOptions = updatedOpts.JWT
+
+		// 特别处理日志级别热更新
 		if newLevel := vp.GetString("log.level"); newLevel != "" {
 			logger.LogLevel.Set(logger.GetLogLevel(newLevel))
 		}
@@ -166,8 +186,6 @@ const configDirPath = "./configs" // 配置文件所在的目录名，相对于�
 func GetDefaultConfigPath() string {
 	projectRoot, err := getProjectRoot()
 	if err != nil {
-		// 如果无法获取项目根目录，可以返回一个空字符串或一个已知的回退路径
-		// 或者直接 panic，因为这是核心功能
 		panic(err)
 	}
 	return filepath.Join(projectRoot, configDirPath, configFileName)

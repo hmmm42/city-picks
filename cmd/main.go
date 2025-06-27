@@ -10,25 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-)
 
-//func init() {
-//	defaultConfigPath := config.GetDefaultConfigPath()
-//	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
-//	pflag.Parse()
-//
-//	config.InitConfig(*configPath)
-//
-//	var err error
-//	persistent.DBEngine, err = persistent.NewMySQL(config.MySQLOptions)
-//	if err != nil {
-//		panic(err)
-//	}
-//	cache.RedisClient, err = cache.NewRedisClient(config.RedisOptions)
-//	if err != nil {
-//		panic(err)
-//	}
-//}
+	"github.com/hmmm42/city-picks/internal/config"
+)
 
 func main() {
 	app, err := InitApp()
@@ -36,10 +20,10 @@ func main() {
 		panic(err)
 	}
 	server := &http.Server{
-		Addr:    ":" + app.Config.Server.Port,
+		Addr:    ":" + config.ServerOptions.Port,
 		Handler: app.Engine,
 	}
-	slog.Info("Listening on " + app.Config.Server.Port)
+	slog.Info("Listening on " + server.Addr)
 	go func() {
 		err := server.ListenAndServe()
 		//err = app.Engine.Run(config.ServerOptions.Port)

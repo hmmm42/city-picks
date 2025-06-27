@@ -12,6 +12,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/adapter/cache"
 	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
+	"github.com/hmmm42/city-picks/internal/handler/shopservice"
 	"github.com/hmmm42/city-picks/internal/handler/user"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/internal/router"
@@ -44,10 +45,12 @@ func InitApp() (*App, error) {
 	}
 	userService := service.NewUserService(userRepo, client, slogLogger)
 	loginHandler := user.NewLoginHandler(userService)
-	engine := router.NewRouter(loginHandler)
+	shopRepo := repository.NewShopRepo(db, client)
+	shopService := service.NewShopService(shopRepo)
+	shopserviceShopService := shopservice.NewShopService(shopService)
+	engine := router.NewRouter(loginHandler, shopserviceShopService)
 	app := &App{
 		Engine: engine,
-		Config: options,
 	}
 	return app, nil
 }
@@ -56,7 +59,6 @@ func InitApp() (*App, error) {
 
 type App struct {
 	Engine *gin.Engine
-	Config *config.Options
 }
 
 var configSet = wire.NewSet(config.NewOptions, wire.FieldsOf(new(*config.Options),
@@ -67,10 +69,10 @@ var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
 
 var loggerSet = wire.NewSet(logger.NewLogger)
 
-var repositorySet = wire.NewSet(repository.NewUserRepo)
+var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo)
 
-var serviceSet = wire.NewSet(service.NewUserService)
+var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService)
 
-var handlerSet = wire.NewSet(user.NewLoginHandler)
+var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService)
 
 var routerSet = wire.NewSet(router.NewRouter)

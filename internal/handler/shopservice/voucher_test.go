@@ -15,13 +15,15 @@ import (
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/dal/query"
 	"github.com/hmmm42/city-picks/internal/config"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	config.InitConfig(config.GetDefaultConfigPath())
+	//config.InitConfig(config.GetDefaultConfigPath())
+	_, _ = config.NewOptions()
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		config.MySQLOptions.User,
 		config.MySQLOptions.Password,
@@ -32,7 +34,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	assert.NoError(t, err)
 
-	testDB := config.MySQLOptions.DBName + "_shadow"
+	testDB := viper.GetString("mysql.dbname") + "_shadow"
 	assert.NoError(t, db.Exec("DROP DATABASE IF EXISTS "+testDB).Error)
 	assert.NoError(t, db.Exec("CREATE DATABASE IF NOT EXISTS "+testDB).Error)
 

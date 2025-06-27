@@ -57,7 +57,7 @@ type tbVoucher struct {
 	PayValue    field.Uint64 // 支付金额，单位是分。例如200代表2元
 	ActualValue field.Int64  // 抵扣金额，单位是分。例如200代表2元
 	Type        field.Uint8  // 0,普通券；1,秒杀券
-	Status      field.Uint8  // 1,上架; 2,下架; 3,过期
+	Status      field.Uint8  // 1,上架
 	CreateTime  field.Time   // 创建时间
 	UpdateTime  field.Time   // 更新时间
 

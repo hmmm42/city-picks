@@ -9,6 +9,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/adapter/cache"
 	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
+	"github.com/hmmm42/city-picks/internal/handler/shopservice"
 	"github.com/hmmm42/city-picks/internal/handler/user"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/internal/router"
@@ -18,7 +19,6 @@ import (
 
 type App struct {
 	Engine *gin.Engine
-	Config *config.Options
 }
 
 var configSet = wire.NewSet(config.NewOptions,
@@ -28,9 +28,9 @@ var configSet = wire.NewSet(config.NewOptions,
 var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
 var loggerSet = wire.NewSet(logger.NewLogger)
 
-var repositorySet = wire.NewSet(repository.NewUserRepo)
-var serviceSet = wire.NewSet(service.NewUserService)
-var handlerSet = wire.NewSet(user.NewLoginHandler)
+var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo)
+var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService)
+var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService)
 var routerSet = wire.NewSet(router.NewRouter)
 
 func InitApp() (*App, error) {

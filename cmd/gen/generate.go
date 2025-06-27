@@ -17,6 +17,7 @@ import (
 //}
 
 func main() {
+	_, _ = config.NewOptions()
 	mySQL, err := persistent.NewMySQL(config.MySQLOptions)
 	if err != nil {
 		panic("Failed to connect to MySQL: " + err.Error())
