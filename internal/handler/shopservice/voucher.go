@@ -10,7 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/dal/query"
-	"github.com/hmmm42/city-picks/internal/db"
+	"github.com/hmmm42/city-picks/internal/adapter/cache"
+	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/pkg/code"
 	"gorm.io/gorm"
 )
@@ -93,7 +94,7 @@ func createSeckillVoucher(voucher *Voucher) error {
 	}
 
 	// 使用事务
-	q := query.Use(db.DBEngine)
+	q := query.Use(persistent.DBEngine)
 	return q.Transaction(func(tx *query.Query) error {
 		err := tx.TbVoucher.Create(&v)
 		if err != nil {
@@ -120,7 +121,7 @@ func nextID(ctx context.Context, keyPrefix string) int64 {
 	now := time.Now().Unix()
 
 	date := time.Now().Format(time.DateOnly)
-	count, err := db.RedisClient.Incr(ctx, "incr:"+keyPrefix+":"+date).Result()
+	count, err := cache.RedisClient.Incr(ctx, "incr:"+keyPrefix+":"+date).Result()
 	if err != nil {
 		slog.Error("failed to increment ID", "err", err)
 		return -1
@@ -189,7 +190,7 @@ func createVoucherOrder(c *gin.Context, req seckillRequest) {
 		UserID:    uint64(req.UserID),
 	}
 
-	q := query.Use(db.DBEngine)
+	q := query.Use(persistent.DBEngine)
 	err = q.Transaction(func(tx *query.Query) error {
 		info, err := tx.TbSeckillVoucher.Where(
 			tx.TbSeckillVoucher.VoucherID.Eq(uint64(req.VoucherID)),

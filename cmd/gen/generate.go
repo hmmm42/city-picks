@@ -1,24 +1,23 @@
 package main
 
 import (
+	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
-	"github.com/hmmm42/city-picks/internal/db"
-	"github.com/spf13/pflag"
 	"gorm.io/gen"
 	"gorm.io/gen/field"
 	"gorm.io/gorm"
 )
 
-func init() {
-	defaultConfigPath := config.GetDefaultConfigPath()
-	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
-	pflag.Parse()
-
-	config.InitConfig(*configPath)
-}
+//func init() {
+//	defaultConfigPath := config.GetDefaultConfigPath()
+//	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
+//	pflag.Parse()
+//
+//	config.InitConfig(*configPath)
+//}
 
 func main() {
-	mySQL, err := db.NewMySQL(config.MySQLOptions)
+	mySQL, err := persistent.NewMySQL(config.MySQLOptions)
 	if err != nil {
 		panic("Failed to connect to MySQL: " + err.Error())
 	}

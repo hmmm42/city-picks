@@ -4,12 +4,12 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hmmm42/city-picks/internal/shopservice"
-	"github.com/hmmm42/city-picks/internal/user"
+	shopservice2 "github.com/hmmm42/city-picks/internal/handler/shopservice"
+	"github.com/hmmm42/city-picks/internal/handler/user"
 	"github.com/hmmm42/city-picks/pkg/code"
 )
 
-func NewRouter() *gin.Engine {
+func NewRouter(userHandler *user.LoginHandler) *gin.Engine {
 	//r := gin.New()
 	//r.Use(gin.Recovery())
 	r := gin.Default()
@@ -18,8 +18,8 @@ func NewRouter() *gin.Engine {
 		code.WriteResponse(c, code.ErrSuccess, "pong")
 	})
 
-	r.GET("/user/verificationcode/:phone", user.GetVerificationCode)
-	r.POST("/user/login", user.Login)
+	r.GET("/user/verificationcode/:phone", userHandler.GetVerificationCode)
+	r.POST("/user/login", userHandler.Login)
 
 	protected := r.Group("/")
 	//protected.Use(middleware.JWT())
@@ -29,14 +29,14 @@ func NewRouter() *gin.Engine {
 			code.WriteResponse(c, code.ErrSuccess, "pong from protected route")
 		})
 
-		protected.GET("/shop/:id", shopservice.QueryShopByID)
-		protected.GET("/shop_type", shopservice.QueryShopTypeList)
-		protected.POST("/shop/create", shopservice.CreateShop)
-		protected.POST("/shop/update", shopservice.UpdateShop)
-		protected.DELETE("/shop/:id", shopservice.DeleteShop)
+		protected.GET("/shop/:id", shopservice2.QueryShopByID)
+		protected.GET("/shop_type", shopservice2.QueryShopTypeList)
+		protected.POST("/shop/create", shopservice2.CreateShop)
+		protected.POST("/shop/update", shopservice2.UpdateShop)
+		protected.DELETE("/shop/:id", shopservice2.DeleteShop)
 
-		protected.POST("/voucher/create", shopservice.CreateVoucher)
-		protected.POST("/voucher/seckill", shopservice.SeckillVoucher)
+		protected.POST("/voucher/create", shopservice2.CreateVoucher)
+		protected.POST("/voucher/seckill", shopservice2.SeckillVoucher)
 	}
 	return r
 }

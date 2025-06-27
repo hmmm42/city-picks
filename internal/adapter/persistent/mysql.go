@@ -1,4 +1,4 @@
-package db
+package persistent
 
 import (
 	"fmt"
@@ -11,13 +11,13 @@ import (
 
 var DBEngine *gorm.DB
 
-func NewMySQL(config *config.MySQLSetting) (*gorm.DB, error) {
+func NewMySQL(opts *config.MySQLSetting) (*gorm.DB, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		config.User,
-		config.Password,
-		config.Host,
-		config.Port,
-		config.DBName,
+		opts.User,
+		opts.Password,
+		opts.Host,
+		opts.Port,
+		opts.DBName,
 	)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -28,8 +28,8 @@ func NewMySQL(config *config.MySQLSetting) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
-	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(opts.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(opts.MaxOpenConns)
 
 	// 设置了才能使用 query 包
 	query.SetDefault(db)

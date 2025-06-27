@@ -48,6 +48,34 @@ func InitLogger(config *LogSettings) {
 	slog.SetDefault(logHandler)
 }
 
+func NewLogger(opts *LogSettings) (*slog.Logger, error) {
+	log := lumberjack.Logger{
+		Filename:   opts.Filename,
+		MaxSize:    opts.MaxSize,
+		MaxBackups: opts.MaxBackups,
+		MaxAge:     opts.MaxAge,
+		LocalTime:  true,
+	}
+
+	LogLevel.Set(GetLogLevel(opts.Level))
+	var logHandler *slog.Logger
+	if isLocal, _ := strconv.ParseBool(os.Getenv("LOCAL_ENV")); isLocal {
+		logHandler = slog.New(tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      LogLevel, // 设置最低日志级别
+			AddSource:  true,
+			TimeFormat: time.DateTime,
+		}))
+	} else {
+		logHandler = slog.New(slog.NewJSONHandler(&log, &slog.HandlerOptions{
+			Level:     LogLevel,
+			AddSource: true,
+		}))
+	}
+
+	slog.SetDefault(logHandler)
+	return logHandler, nil
+}
+
 func GetLogLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case "debug":

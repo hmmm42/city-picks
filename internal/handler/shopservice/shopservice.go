@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/dal/query"
-	"github.com/hmmm42/city-picks/internal/db"
+	redis2 "github.com/hmmm42/city-picks/internal/adapter/cache"
 	"github.com/hmmm42/city-picks/pkg/code"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
@@ -52,7 +52,7 @@ func QueryShopByID(c *gin.Context) {
 func queryShopByIDSingle(c context.Context, idStr string) (any, error) {
 	slog.Debug("Querying shop by ID", "id", idStr)
 
-	shopGot, err := db.RedisClient.Get(c, ShopKeyPrefix+idStr).Result()
+	shopGot, err := redis2.RedisClient.Get(c, ShopKeyPrefix+idStr).Result()
 	if err == nil {
 		if shopGot == "" {
 			return "", fmt.Errorf("%w: shop not found for ID %s", gorm.ErrRecordNotFound, idStr)
@@ -77,7 +77,7 @@ func queryShopByIDSingle(c context.Context, idStr string) (any, error) {
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// 缓存 null 值，避免频繁查询数据库, 防止缓存穿透
-		_, _ = db.RedisClient.Set(c, ShopKeyPrefix+idStr, "", CacheNullTTL).Result()
+		_, _ = redis2.RedisClient.Set(c, ShopKeyPrefix+idStr, "", CacheNullTTL).Result()
 		return "", fmt.Errorf("%w: shop not found for ID %s", gorm.ErrRecordNotFound, idStr)
 	}
 	if err != nil {
@@ -92,7 +92,7 @@ func queryShopByIDSingle(c context.Context, idStr string) (any, error) {
 	}
 
 	// 添加随机延迟，避免缓存雪崩
-	_, err = db.RedisClient.Set(c, ShopKeyPrefix+idStr, shopMarshalled, CacheShopTTL+time.Duration(rand.Int31n(10000))).Result()
+	_, err = redis2.RedisClient.Set(c, ShopKeyPrefix+idStr, shopMarshalled, CacheShopTTL+time.Duration(rand.Int31n(10000))).Result()
 	if err != nil {
 		slog.Error("Failed to cache shop data", "err", err)
 		return "", err
@@ -103,7 +103,7 @@ func queryShopByIDSingle(c context.Context, idStr string) (any, error) {
 
 func QueryShopTypeList(c *gin.Context) {
 	// 取出list中全部数据
-	shopTypesGot, err := db.RedisClient.LRange(c, ShopTypeKey, 0, -1).Result()
+	shopTypesGot, err := redis2.RedisClient.LRange(c, ShopTypeKey, 0, -1).Result()
 	if errors.Is(err, redis.Nil) || len(shopTypesGot) == 0 {
 		shopTypeQuery := query.TbShopType
 		shopTypes, err := shopTypeQuery.Order(shopTypeQuery.Sort).Find()
@@ -117,7 +117,7 @@ func QueryShopTypeList(c *gin.Context) {
 			return
 		}
 
-		pipeline := db.RedisClient.Pipeline()
+		pipeline := redis2.RedisClient.Pipeline()
 		for _, shopType := range shopTypes {
 			v, _ := json.Marshal(shopType)
 			pipeline.RPush(c, ShopTypeKey, string(v))
@@ -160,7 +160,7 @@ func UpdateShop(c *gin.Context) {
 	}
 
 	key := ShopKeyPrefix + strconv.FormatUint(shop.ID, 10)
-	if err = db.RedisClient.Del(c, key).Err(); err != nil {
+	if err = redis2.RedisClient.Del(c, key).Err(); err != nil {
 		slog.Error("Failed to delete shop cache", "err", err)
 		code.WriteResponse(c, code.ErrDatabase, nil)
 		return
@@ -206,7 +206,7 @@ func DeleteShop(c *gin.Context) {
 	}
 
 	key := ShopKeyPrefix + idStr
-	if err = db.RedisClient.Del(c, key).Err(); err != nil {
+	if err = redis2.RedisClient.Del(c, key).Err(); err != nil {
 		slog.Error("Failed to delete shop cache", "err", err)
 		code.WriteResponse(c, code.ErrDatabase, nil)
 		return

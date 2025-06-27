@@ -2,13 +2,14 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/hmmm42/city-picks/pkg/logger"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -19,6 +20,14 @@ var (
 	LogOptions    *logger.LogSettings
 	JWTOptions    *JWTSetting
 )
+
+type Options struct {
+	Server *ServerSetting
+	MySQL  *MySQLSetting
+	Redis  *RedisSetting
+	Log    *logger.LogSettings
+	JWT    *JWTSetting
+}
 
 type ServerSetting struct {
 	RunMode      string
@@ -49,78 +58,107 @@ type JWTSetting struct {
 	Expire time.Duration
 }
 
-//func init() {
-//	InitConfig()
+func NewOptions() (*Options, error) {
+	// 使用 pflag 读取命令行参数中的配置文件路径
+	configPath := pflag.StringP("config", "c", GetDefaultConfigPath(), "path to config file")
+	pflag.Parse()
+
+	vp := viper.New()
+	vp.SetConfigFile(*configPath)
+
+	// 绑定环境变量，特别是JWT Secret
+	_ = vp.BindEnv("jwt.secret", "JWT_SECRET")
+	vp.AutomaticEnv()
+
+	if err := vp.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var opts Options
+	if err := vp.Unmarshal(&opts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// 配置热更新逻辑
+	vp.WatchConfig()
+	vp.OnConfigChange(func(in fsnotify.Event) {
+		slog.Info("Config file changed:", "event", in.Name)
+		if newLevel := vp.GetString("log.level"); newLevel != "" {
+			logger.LogLevel.Set(logger.GetLogLevel(newLevel))
+		}
+	})
+
+	return &opts, nil
+}
+
+//var once sync.Once
+//
+//func InitConfig(path string) {
+//	once.Do(func() {
+//		if err := readConfigFile(path); err != nil {
+//			panic("Failed to read config file: " + err.Error())
+//		}
+//
+//		initSettings(map[string]any{
+//			"server": &ServerOptions,
+//			"mysql":  &MySQLOptions,
+//			"redis":  &RedisOptions,
+//			"log":    &LogOptions,
+//			"jwt":    &JWTOptions,
+//		})
+//		JWTOptions.Secret = viper.Get("jwt.Secret").(string)
+//
+//		logger.InitLogger(LogOptions)
+//	})
 //}
-
-var once sync.Once
-
-func InitConfig(path string) {
-	once.Do(func() {
-		if err := readConfigFile(path); err != nil {
-			panic("Failed to read config file: " + err.Error())
-		}
-
-		initSettings(map[string]any{
-			"server": &ServerOptions,
-			"mysql":  &MySQLOptions,
-			"redis":  &RedisOptions,
-			"log":    &LogOptions,
-			"jwt":    &JWTOptions,
-		})
-		JWTOptions.Secret = viper.Get("jwt.Secret").(string)
-
-		logger.InitLogger(LogOptions)
-	})
-}
-
-func readConfigFile(path string) error {
-	viper.SetConfigFile(path)
-	_ = viper.BindEnv("jwt.Secret", "JWT_SECRET")
-	viper.AutomaticEnv()
-	if err := viper.ReadInConfig(); err != nil {
-		return err
-	}
-	viper.WatchConfig()
-	// 热更新: 用于更新日志等级
-	viper.OnConfigChange(func(in fsnotify.Event) {
-		_ = reloadAllSections()
-		level := viper.GetString("LogLevel")
-		logger.LogLevel.Set(logger.GetLogLevel(level))
-	})
-	return nil
-}
-
-var sections = make(map[string]any)
-
-func initSettings(settings map[string]any) {
-	for key, setting := range settings {
-		if err := ReadSection(key, setting); err != nil {
-			panic(fmt.Sprintf("Failed to read %s config: %s", key, err.Error()))
-		}
-	}
-}
-
-func ReadSection(key string, v any) error {
-	err := viper.UnmarshalKey(key, v)
-	if err != nil {
-		return err
-	}
-
-	if _, ok := sections[key]; !ok {
-		sections[key] = v
-	}
-	return nil
-}
-
-func reloadAllSections() error {
-	for key, v := range sections {
-		if err := ReadSection(key, v); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+//
+//func readConfigFile(path string) error {
+//	viper.SetConfigFile(path)
+//	_ = viper.BindEnv("jwt.Secret", "JWT_SECRET")
+//	viper.AutomaticEnv()
+//	if err := viper.ReadInConfig(); err != nil {
+//		return err
+//	}
+//	viper.WatchConfig()
+//	// 热更新: 用于更新日志等级
+//	viper.OnConfigChange(func(in fsnotify.Event) {
+//		_ = reloadAllSections()
+//		level := viper.GetString("LogLevel")
+//		logger.LogLevel.Set(logger.GetLogLevel(level))
+//	})
+//	return nil
+//}
+//
+//var sections = make(map[string]any)
+//
+//func initSettings(settings map[string]any) {
+//	for key, setting := range settings {
+//		if err := ReadSection(key, setting); err != nil {
+//			panic(fmt.Sprintf("Failed to read %s config: %s", key, err.Error()))
+//		}
+//	}
+//}
+//
+//func ReadSection(key string, v any) error {
+//	err := viper.UnmarshalKey(key, v)
+//	if err != nil {
+//		return err
+//	}
+//
+//	if _, ok := sections[key]; !ok {
+//		sections[key] = v
+//	}
+//	return nil
+//}
+//
+//func reloadAllSections() error {
+//	for key, v := range sections {
+//		if err := ReadSection(key, v); err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
 
 // 定义配置文件的相对路径
 const configFileName = "config.yaml"

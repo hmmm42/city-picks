@@ -3,46 +3,46 @@ package main
 import (
 	"context"
 	"errors"
+
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/hmmm42/city-picks/internal/config"
-	"github.com/hmmm42/city-picks/internal/db"
-	"github.com/hmmm42/city-picks/internal/router"
-	"github.com/spf13/pflag"
 )
 
-func init() {
-	defaultConfigPath := config.GetDefaultConfigPath()
-	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
-	pflag.Parse()
-
-	config.InitConfig(*configPath)
-
-	var err error
-	db.DBEngine, err = db.NewMySQL(config.MySQLOptions)
-	if err != nil {
-		panic(err)
-	}
-	db.RedisClient, err = db.NewRedisClient(config.RedisOptions)
-	if err != nil {
-		panic(err)
-	}
-}
+//func init() {
+//	defaultConfigPath := config.GetDefaultConfigPath()
+//	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
+//	pflag.Parse()
+//
+//	config.InitConfig(*configPath)
+//
+//	var err error
+//	persistent.DBEngine, err = persistent.NewMySQL(config.MySQLOptions)
+//	if err != nil {
+//		panic(err)
+//	}
+//	cache.RedisClient, err = cache.NewRedisClient(config.RedisOptions)
+//	if err != nil {
+//		panic(err)
+//	}
+//}
 
 func main() {
-	r := router.NewRouter()
-	server := &http.Server{
-		Addr:    ":" + config.ServerOptions.Port,
-		Handler: r,
+	app, err := InitApp()
+	if err != nil {
+		panic(err)
 	}
-	slog.Info("Listening on " + config.ServerOptions.Port)
+	server := &http.Server{
+		Addr:    ":" + app.Config.Server.Port,
+		Handler: app.Engine,
+	}
+	slog.Info("Listening on " + app.Config.Server.Port)
 	go func() {
 		err := server.ListenAndServe()
+		//err = app.Engine.Run(config.ServerOptions.Port)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Server failed to start", "error", err)
 			os.Exit(1)
@@ -55,8 +55,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
+	if err = server.Shutdown(ctx); err != nil {
 		panic(err)
 	}
 }
