@@ -167,6 +167,22 @@ func SeckillVoucher(c *gin.Context) {
 }
 
 func createVoucherOrder(c *gin.Context, req seckillRequest) {
+	orderQuery := query.TbVoucherOrder
+	// 检查用户是否已经购买过该优惠券
+	exists, err := orderQuery.Where(
+		orderQuery.VoucherID.Eq(uint64(req.VoucherID)),
+		orderQuery.UserID.Eq(uint64(req.UserID)),
+	).Find()
+	if err != nil {
+		slog.Error("failed to check existing voucher order", "err", err)
+		code.WriteResponse(c, code.ErrDatabase, nil)
+		return
+	}
+	if len(exists) > 0 {
+		code.WriteResponse(c, code.ErrValidation, "user has already purchased this voucher")
+		return
+	}
+
 	order := model.TbVoucherOrder{
 		ID:        nextID(c, "order"),
 		VoucherID: uint64(req.VoucherID),
@@ -174,7 +190,7 @@ func createVoucherOrder(c *gin.Context, req seckillRequest) {
 	}
 
 	q := query.Use(db.DBEngine)
-	err := q.Transaction(func(tx *query.Query) error {
+	err = q.Transaction(func(tx *query.Query) error {
 		info, err := tx.TbSeckillVoucher.Where(
 			tx.TbSeckillVoucher.VoucherID.Eq(uint64(req.VoucherID)),
 			tx.TbSeckillVoucher.Stock.Gt(0), // 乐观锁 CAS
