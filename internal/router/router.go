@@ -12,6 +12,7 @@ import (
 func NewRouter(
 	userHandler *user.LoginHandler,
 	shopHandler *shopservice.ShopService,
+	voucherHandler *shopservice.VoucherHandler,
 ) *gin.Engine {
 	//r := gin.New()
 	//r.Use(gin.Recovery())
@@ -38,8 +39,8 @@ func NewRouter(
 		protected.POST("/shop/update", shopHandler.UpdateShop)
 		protected.DELETE("/shop/:id", shopHandler.DeleteShop)
 
-		//protected.POST("/voucher/create", shopHandler.CreateVoucher)
-		//protected.POST("/voucher/seckill", shopHandler.SeckillVoucher)
+		protected.POST("/voucher/create", voucherHandler.CreateVoucher)
+		protected.POST("/voucher/seckill", voucherHandler.SeckillVoucher)
 	}
 	return r
 }

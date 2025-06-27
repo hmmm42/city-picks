@@ -28,9 +28,9 @@ var configSet = wire.NewSet(config.NewOptions,
 var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
 var loggerSet = wire.NewSet(logger.NewLogger)
 
-var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo)
-var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService)
-var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService)
+var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, repository.NewVoucherRepo, repository.NewVoucherOrderRepo)
+var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService, service.NewVoucherService)
+var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService, shopservice.NewVoucherHandler)
 var routerSet = wire.NewSet(router.NewRouter)
 
 func InitApp() (*App, error) {

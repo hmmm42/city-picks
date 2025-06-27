@@ -1,7 +1,6 @@
 package shopservice
 
 import (
-	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -28,9 +27,11 @@ func TestSingleflight(t *testing.T) {
 			defer wg.Done()
 			client := &http.Client{Timeout: 10 * time.Second}
 			resp, err := client.Get("http://localhost:14530/shop/7")
-			defer func(Body io.ReadCloser) {
-				_ = Body.Close()
-			}(resp.Body)
+			if resp != nil {
+				defer func() {
+					_ = resp.Body.Close()
+				}()
+			}
 			if err != nil {
 				t.Errorf("Request failed: %v", err)
 				return

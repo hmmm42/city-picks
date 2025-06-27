@@ -25,7 +25,7 @@ func main() {
 	}
 	slog.Info("Listening on " + server.Addr)
 	go func() {
-		err := server.ListenAndServe()
+		err = server.ListenAndServe()
 		//err = app.Engine.Run(config.ServerOptions.Port)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Server failed to start", "error", err)
