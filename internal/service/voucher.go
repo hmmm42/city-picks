@@ -17,7 +17,7 @@ const CountBits = 32
 
 type VoucherService interface {
 	CreateVoucher(ctx context.Context, voucher *model.TbVoucher, seckillVoucher *model.TbSeckillVoucher) error
-	SeckillVoucher(ctx context.Context, voucherID, userID uint64) error
+	SeckillVoucher(ctx context.Context, voucherID, userID uint64) (*model.TbVoucherOrder, error)
 }
 
 type voucherService struct {
@@ -34,42 +34,70 @@ func (s *voucherService) CreateVoucher(ctx context.Context, voucher *model.TbVou
 	return s.voucherRepo.CreateVoucher(ctx, voucher)
 }
 
-func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID uint64) error {
-	// 1. 查询优惠券
+func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID uint64) (*model.TbVoucherOrder, error) {
+	// 查询优惠券
 	seckillVoucher, err := s.voucherRepo.GetSeckillVoucherByID(ctx, voucherID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return fmt.Errorf("seckill voucher not found")
+		return nil, fmt.Errorf("seckill voucher not found")
 	}
 	if err != nil {
 		slog.Error("failed to query seckill voucher", "err", err)
-		return fmt.Errorf("failed to query seckill voucher: %w", err)
+		return nil, fmt.Errorf("failed to query seckill voucher: %w", err)
 	}
 
-	// 2. 判断秒杀是否开始或结束
+	// 判断秒杀是否开始或结束
 	now := time.Now()
 	if seckillVoucher.BeginTime.After(now) || seckillVoucher.EndTime.Before(now) {
-		return fmt.Errorf("seckill not available at this time")
+		return nil, fmt.Errorf("seckill not available at this time")
 	}
 
-	// 3. 判断库存
+	// 判断库存
 	if seckillVoucher.Stock <= 0 {
-		return fmt.Errorf("seckill voucher out of stock")
+		return nil, fmt.Errorf("seckill voucher out of stock")
 	}
 
-	// 4. 检查用户是否已经购买过该优惠券
+	// 检查用户是否已经购买过该优惠券
 	exists, err := s.voucherOrderRepo.HasUserPurchasedVoucher(ctx, voucherID, userID)
 	if err != nil {
 		slog.Error("failed to check existing voucher order", "err", err)
-		return fmt.Errorf("failed to check existing voucher order: %w", err)
+		return nil, fmt.Errorf("failed to check existing voucher order: %w", err)
 	}
 	if exists {
-		return fmt.Errorf("user has already purchased this voucher")
+		return nil, fmt.Errorf("user has already purchased this voucher")
 	}
 
-	// 5. 创建订单并扣减库存
+	// 创建订单并扣减库存
+	//orderID := s.nextID(ctx, "order")
+	//if orderID == -1 {
+	//	return nil, fmt.Errorf("failed to generate order ID")
+	//}
+	//
+	//order := &model.TbVoucherOrder{
+	//	ID:        orderID,
+	//	VoucherID: voucherID,
+	//	UserID:    userID,
+	//}
+	//
+	//err = s.voucherRepo.CreateVoucherOrderAndReduceStock(ctx, order, voucherID)
+	//if err != nil {
+	//	slog.Error("failed to create voucher order and reduce stock", "err", err)
+	//	return fmt.Errorf("failed to create voucher order and reduce stock: %w", err)
+	//}
+	//
+	//return nil
+
+	order, err := s.createVoucherOrder(ctx, voucherID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+func (s *voucherService) createVoucherOrder(ctx context.Context, voucherID, userID uint64) (*model.TbVoucherOrder, error) {
+	// 创建订单并扣减库存
 	orderID := s.nextID(ctx, "order")
 	if orderID == -1 {
-		return fmt.Errorf("failed to generate order ID")
+		return nil, fmt.Errorf("failed to generate order ID")
 	}
 
 	order := &model.TbVoucherOrder{
@@ -78,13 +106,13 @@ func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID u
 		UserID:    userID,
 	}
 
-	err = s.voucherRepo.CreateVoucherOrderAndReduceStock(ctx, order, voucherID)
+	err := s.voucherRepo.CreateVoucherOrderAndReduceStock(ctx, order, voucherID)
 	if err != nil {
 		slog.Error("failed to create voucher order and reduce stock", "err", err)
-		return fmt.Errorf("failed to create voucher order and reduce stock: %w", err)
+		return nil, fmt.Errorf("failed to create voucher order and reduce stock: %w", err)
 	}
 
-	return nil
+	return order, nil
 }
 
 func (s *voucherService) nextID(ctx context.Context, keyPrefix string) int64 {

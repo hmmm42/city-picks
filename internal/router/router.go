@@ -4,15 +4,14 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hmmm42/city-picks/internal/handler/shopservice"
-	"github.com/hmmm42/city-picks/internal/handler/user"
+	"github.com/hmmm42/city-picks/internal/handler"
 	"github.com/hmmm42/city-picks/pkg/code"
 )
 
 func NewRouter(
-	userHandler *user.LoginHandler,
-	shopHandler *shopservice.ShopService,
-	voucherHandler *shopservice.VoucherHandler,
+	userHandler *handler.LoginHandler,
+	shopHandler *handler.ShopService,
+	voucherHandler *handler.VoucherHandler,
 ) *gin.Engine {
 	//r := gin.New()
 	//r.Use(gin.Recovery())

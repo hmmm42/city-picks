@@ -1,4 +1,4 @@
-package shopservice
+package handler
 
 import (
 	"log/slog"
@@ -119,11 +119,13 @@ func (h *VoucherHandler) SeckillVoucher(c *gin.Context) {
 		return
 	}
 
-	err = h.voucherService.SeckillVoucher(c.Request.Context(), vid, uid)
+	order, err := h.voucherService.SeckillVoucher(c.Request.Context(), vid, uid)
 	if err != nil {
 		slog.Error("failed to seckill voucher", "err", err)
 		code.WriteResponse(c, code.ErrDatabase, err.Error()) // 返回具体的错误信息
 		return
 	}
-	code.WriteResponse(c, code.ErrSuccess, nil)
+	code.WriteResponse(c, code.ErrSuccess, gin.H{
+		"order_id": order.ID,
+	})
 }

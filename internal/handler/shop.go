@@ -1,4 +1,4 @@
-package shopservice
+package handler
 
 import (
 	"errors"

@@ -9,8 +9,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/adapter/cache"
 	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
-	"github.com/hmmm42/city-picks/internal/handler/shopservice"
-	"github.com/hmmm42/city-picks/internal/handler/user"
+	"github.com/hmmm42/city-picks/internal/handler"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/internal/router"
 	"github.com/hmmm42/city-picks/internal/service"
@@ -30,7 +29,7 @@ var loggerSet = wire.NewSet(logger.NewLogger)
 
 var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, repository.NewVoucherRepo, repository.NewVoucherOrderRepo)
 var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService, service.NewVoucherService)
-var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService, shopservice.NewVoucherHandler)
+var handlerSet = wire.NewSet(handler.NewLoginHandler, handler.NewShopService, handler.NewVoucherHandler)
 var routerSet = wire.NewSet(router.NewRouter)
 
 func InitApp() (*App, error) {

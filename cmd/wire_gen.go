@@ -12,8 +12,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/adapter/cache"
 	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
-	"github.com/hmmm42/city-picks/internal/handler/shopservice"
-	"github.com/hmmm42/city-picks/internal/handler/user"
+	"github.com/hmmm42/city-picks/internal/handler"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/internal/router"
 	"github.com/hmmm42/city-picks/internal/service"
@@ -44,15 +43,15 @@ func InitApp() (*App, error) {
 		return nil, err
 	}
 	userService := service.NewUserService(userRepo, client, slogLogger)
-	loginHandler := user.NewLoginHandler(userService)
+	loginHandler := handler.NewLoginHandler(userService)
 	shopRepo := repository.NewShopRepo(db, client)
 	shopService := service.NewShopService(shopRepo)
-	shopserviceShopService := shopservice.NewShopService(shopService)
+	handlerShopService := handler.NewShopService(shopService)
 	voucherRepo := repository.NewVoucherRepo(db, slogLogger)
 	voucherOrderRepo := repository.NewVoucherOrderRepo(db, slogLogger)
 	voucherService := service.NewVoucherService(voucherRepo, voucherOrderRepo, client, slogLogger)
-	voucherHandler := shopservice.NewVoucherHandler(voucherService)
-	engine := router.NewRouter(loginHandler, shopserviceShopService, voucherHandler)
+	voucherHandler := handler.NewVoucherHandler(voucherService)
+	engine := router.NewRouter(loginHandler, handlerShopService, voucherHandler)
 	app := &App{
 		Engine: engine,
 	}
@@ -77,6 +76,6 @@ var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, 
 
 var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService, service.NewVoucherService)
 
-var handlerSet = wire.NewSet(user.NewLoginHandler, shopservice.NewShopService, shopservice.NewVoucherHandler)
+var handlerSet = wire.NewSet(handler.NewLoginHandler, handler.NewShopService, handler.NewVoucherHandler)
 
 var routerSet = wire.NewSet(router.NewRouter)
