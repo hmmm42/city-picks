@@ -9,9 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var DBEngine *gorm.DB
-
-func NewMySQL(opts *config.MySQLSetting) (*gorm.DB, error) {
+func NewMySQL(opts *config.MySQLSetting) (*gorm.DB, func(), error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		opts.User,
 		opts.Password,
@@ -21,17 +19,21 @@ func NewMySQL(opts *config.MySQLSetting) (*gorm.DB, error) {
 	)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sqlDB.SetMaxIdleConns(opts.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(opts.MaxOpenConns)
 
 	// 设置了才能使用 query 包
 	query.SetDefault(db)
-	return db, nil
+
+	cleanup := func() {
+		_ = sqlDB.Close()
+	}
+	return db, cleanup, nil
 }

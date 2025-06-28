@@ -104,7 +104,7 @@ func (s *shopService) GetShopTypeList(ctx context.Context) ([]*model.TbShopType,
 		return shopTypes, nil
 	}
 
-	if !errors.Is(err, redis.Nil) {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		slog.Error("failed to get shop types from cache", "err", err)
 	}
 

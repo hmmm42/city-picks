@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/go-redsync/redsync/v4"
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +25,7 @@ type voucherService struct {
 	voucherRepo      repository.VoucherRepo
 	voucherOrderRepo repository.VoucherOrderRepo
 	redisClient      *redis.Client
+	redsync          *redsync.Redsync // 用于分布式锁
 	logger           *slog.Logger
 }
 
@@ -66,25 +68,17 @@ func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID u
 		return nil, fmt.Errorf("user has already purchased this voucher")
 	}
 
-	// 创建订单并扣减库存
-	//orderID := s.nextID(ctx, "order")
-	//if orderID == -1 {
-	//	return nil, fmt.Errorf("failed to generate order ID")
-	//}
-	//
-	//order := &model.TbVoucherOrder{
-	//	ID:        orderID,
-	//	VoucherID: voucherID,
-	//	UserID:    userID,
-	//}
-	//
-	//err = s.voucherRepo.CreateVoucherOrderAndReduceStock(ctx, order, voucherID)
-	//if err != nil {
-	//	slog.Error("failed to create voucher order and reduce stock", "err", err)
-	//	return fmt.Errorf("failed to create voucher order and reduce stock: %w", err)
-	//}
-	//
-	//return nil
+	// 分布式锁, 防止集群内重复下单
+	mutex := s.redsync.NewMutex(fmt.Sprintf("order:%d", userID), redsync.WithTries(1))
+	if err = mutex.LockContext(ctx); err != nil {
+		return nil, fmt.Errorf("previous order logic is still processing/not allowing duplicate orders")
+	}
+	defer func() {
+		_, err = mutex.Unlock()
+		if err != nil {
+			slog.Error("failed to unlock mutex", "err", err)
+		}
+	}()
 
 	order, err := s.createVoucherOrder(ctx, voucherID, userID)
 	if err != nil {

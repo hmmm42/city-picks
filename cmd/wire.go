@@ -24,7 +24,7 @@ var configSet = wire.NewSet(config.NewOptions,
 	wire.FieldsOf(new(*config.Options),
 		// 从 *Options 中提取出子结构体，供其他Provider使用
 		"MySQL", "Redis", "Log", "JWT", "Server"))
-var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
+var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient, cache.NewRedsync)
 var loggerSet = wire.NewSet(logger.NewLogger)
 
 var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, repository.NewVoucherRepo, repository.NewVoucherOrderRepo)
@@ -32,7 +32,7 @@ var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService, ser
 var handlerSet = wire.NewSet(handler.NewLoginHandler, handler.NewShopService, handler.NewVoucherHandler)
 var routerSet = wire.NewSet(router.NewRouter)
 
-func InitApp() (*App, error) {
+func InitApp() (*App, func(), error) {
 	wire.Build(
 		configSet,
 		dbSet,
@@ -43,5 +43,5 @@ func InitApp() (*App, error) {
 		routerSet,
 		wire.Struct(new(App), "*"),
 	)
-	return nil, nil
+	return nil, nil, nil
 }

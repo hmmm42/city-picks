@@ -15,10 +15,12 @@ import (
 )
 
 func main() {
-	app, err := InitApp()
+	app, cleanup, err := InitApp()
 	if err != nil {
 		panic(err)
 	}
+	defer cleanup()
+
 	server := &http.Server{
 		Addr:    ":" + config.ServerOptions.Port,
 		Handler: app.Engine,

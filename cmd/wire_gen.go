@@ -21,26 +21,29 @@ import (
 
 // Injectors from wire.go:
 
-func InitApp() (*App, error) {
+func InitApp() (*App, func(), error) {
 	options, err := config.NewOptions()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	mySQLSetting := options.MySQL
-	db, err := persistent.NewMySQL(mySQLSetting)
+	db, cleanup, err := persistent.NewMySQL(mySQLSetting)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	userRepo := repository.NewUserRepo(db)
 	redisSetting := options.Redis
-	client, err := cache.NewRedisClient(redisSetting)
+	client, cleanup2, err := cache.NewRedisClient(redisSetting)
 	if err != nil {
-		return nil, err
+		cleanup()
+		return nil, nil, err
 	}
 	logSettings := options.Log
 	slogLogger, err := logger.NewLogger(logSettings)
 	if err != nil {
-		return nil, err
+		cleanup2()
+		cleanup()
+		return nil, nil, err
 	}
 	userService := service.NewUserService(userRepo, client, slogLogger)
 	loginHandler := handler.NewLoginHandler(userService)
@@ -55,7 +58,10 @@ func InitApp() (*App, error) {
 	app := &App{
 		Engine: engine,
 	}
-	return app, nil
+	return app, func() {
+		cleanup2()
+		cleanup()
+	}, nil
 }
 
 // wire.go:
@@ -68,7 +74,7 @@ var configSet = wire.NewSet(config.NewOptions, wire.FieldsOf(new(*config.Options
 
 	"MySQL", "Redis", "Log", "JWT", "Server"))
 
-var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
+var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient, cache.NewRedsync)
 
 var loggerSet = wire.NewSet(logger.NewLogger)
 
