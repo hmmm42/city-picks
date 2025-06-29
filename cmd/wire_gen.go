@@ -13,6 +13,7 @@ import (
 	"github.com/hmmm42/city-picks/internal/adapter/persistent"
 	"github.com/hmmm42/city-picks/internal/config"
 	"github.com/hmmm42/city-picks/internal/handler"
+	"github.com/hmmm42/city-picks/internal/mq"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/internal/router"
 	"github.com/hmmm42/city-picks/internal/service"
@@ -50,13 +51,16 @@ func InitApp() (*App, func(), error) {
 	shopRepo := repository.NewShopRepo(db, client)
 	shopService := service.NewShopService(shopRepo)
 	handlerShopService := handler.NewShopService(shopService)
-	voucherRepo := repository.NewVoucherRepo(db, slogLogger)
+	voucherRepo := repository.NewVoucherRepo(db, client, slogLogger)
 	voucherOrderRepo := repository.NewVoucherOrderRepo(db, slogLogger)
 	voucherService := service.NewVoucherService(voucherRepo, voucherOrderRepo, client, slogLogger)
 	voucherHandler := handler.NewVoucherHandler(voucherService)
 	engine := router.NewRouter(loginHandler, handlerShopService, voucherHandler)
+	messageQueue := repository.NewMessageQueue(client)
+	orderConsumer := mq.NewOrderConsumer(messageQueue, voucherService)
 	app := &App{
-		Engine: engine,
+		Engine:        engine,
+		OrderConsumer: orderConsumer,
 	}
 	return app, func() {
 		cleanup2()
@@ -67,21 +71,24 @@ func InitApp() (*App, func(), error) {
 // wire.go:
 
 type App struct {
-	Engine *gin.Engine
+	Engine        *gin.Engine
+	OrderConsumer *mq.OrderConsumer
 }
 
 var configSet = wire.NewSet(config.NewOptions, wire.FieldsOf(new(*config.Options),
 
 	"MySQL", "Redis", "Log", "JWT", "Server"))
 
-var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient, cache.NewRedsync)
+var dbSet = wire.NewSet(persistent.NewMySQL, cache.NewRedisClient)
 
 var loggerSet = wire.NewSet(logger.NewLogger)
 
-var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, repository.NewVoucherRepo, repository.NewVoucherOrderRepo)
+var repositorySet = wire.NewSet(repository.NewUserRepo, repository.NewShopRepo, repository.NewVoucherRepo, repository.NewVoucherOrderRepo, repository.NewMessageQueue)
 
 var serviceSet = wire.NewSet(service.NewUserService, service.NewShopService, service.NewVoucherService)
 
 var handlerSet = wire.NewSet(handler.NewLoginHandler, handler.NewShopService, handler.NewVoucherHandler)
 
 var routerSet = wire.NewSet(router.NewRouter)
+
+var mqSet = wire.NewSet(mq.NewOrderConsumer)

@@ -21,6 +21,8 @@ func main() {
 	}
 	defer cleanup()
 
+	go app.OrderConsumer.Start(context.Background())
+
 	server := &http.Server{
 		Addr:    ":" + config.ServerOptions.Port,
 		Handler: app.Engine,
