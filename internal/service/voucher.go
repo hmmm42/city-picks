@@ -10,10 +10,9 @@ import (
 	"github.com/hmmm42/city-picks/dal/model"
 	"github.com/hmmm42/city-picks/internal/repository"
 	"github.com/hmmm42/city-picks/pkg/json_time"
-	"github.com/redis/go-redis/v9"
+	sf "github.com/hmmm42/city-picks/pkg/sonyflake"
+	"github.com/sony/sonyflake"
 )
-
-const CountBits = 32
 
 // VoucherDTO defines the request structure for creating a voucher.
 type VoucherDTO struct {
@@ -38,10 +37,9 @@ type VoucherService interface {
 type voucherService struct {
 	voucherRepo      repository.VoucherRepo
 	voucherOrderRepo repository.VoucherOrderRepo
-	rdb              *redis.Client // 用于唯一ID
-	//redsync          *redsync.Redsync // 用于分布式锁
-	mq     repository.MessageQueue // 用于消息队列
-	logger *slog.Logger
+	sf               *sonyflake.Sonyflake    // 用于唯一ID
+	mq               repository.MessageQueue // 用于消息队列
+	logger           *slog.Logger
 }
 
 func (s *voucherService) CreateVoucher(ctx context.Context, req *VoucherDTO) error {
@@ -128,11 +126,15 @@ func (s *voucherService) CreateVoucher(ctx context.Context, req *VoucherDTO) err
 
 func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID uint64) (int64, error) {
 	//script := redis.NewScript(adjustSeckill)
-	orderID := s.nextID(ctx, "order")
+	orderID, err := s.sf.NextID()
+	if err != nil {
+		s.logger.Error("failed to generate unique ID", "err", err)
+		return 0, fmt.Errorf("failed to generate unique ID: %w", err)
+	}
 	keys := []string{
 		strconv.FormatUint(voucherID, 10),
 		strconv.FormatUint(userID, 10),
-		strconv.FormatInt(orderID, 10),
+		strconv.FormatUint(orderID, 10),
 	}
 
 	res, err := s.voucherRepo.ExecScript(ctx, adjustSeckill, keys)
@@ -143,7 +145,7 @@ func (s *voucherService) SeckillVoucher(ctx context.Context, voucherID, userID u
 
 	switch res {
 	case 0:
-		return orderID, nil
+		return int64(orderID), nil
 	case 1:
 		return 0, fmt.Errorf("seckill voucher not found or out of stock")
 	case 2:
@@ -163,24 +165,12 @@ func (s *voucherService) CreateVoucherOrderDB(ctx context.Context, order *model.
 	return nil
 }
 
-// TODO: 改用雪花算法
-func (s *voucherService) nextID(ctx context.Context, keyPrefix string) int64 {
-	now := time.Now().Unix()
-
-	date := time.Now().Format(time.DateOnly)
-	count, err := s.rdb.Incr(ctx, "incr:"+keyPrefix+":"+date).Result()
-	if err != nil {
-		slog.Error("failed to increment ID", "err", err)
-		return -1
-	}
-	return (now << CountBits) | count
-}
-
-func NewVoucherService(voucherRepo repository.VoucherRepo, voucherOrderRepo repository.VoucherOrderRepo, redisClient *redis.Client, logger *slog.Logger) VoucherService {
+func NewVoucherService(voucherRepo repository.VoucherRepo, voucherOrderRepo repository.VoucherOrderRepo, logger *slog.Logger) VoucherService {
+	nsf, _ := sf.NewSonyflake()
 	return &voucherService{
 		voucherRepo:      voucherRepo,
 		voucherOrderRepo: voucherOrderRepo,
-		rdb:              redisClient,
+		sf:               nsf,
 		logger:           logger,
 	}
 }

@@ -53,7 +53,7 @@ func InitApp() (*App, func(), error) {
 	handlerShopService := handler.NewShopService(shopService)
 	voucherRepo := repository.NewVoucherRepo(db, client, slogLogger)
 	voucherOrderRepo := repository.NewVoucherOrderRepo(db, slogLogger)
-	voucherService := service.NewVoucherService(voucherRepo, voucherOrderRepo, client, slogLogger)
+	voucherService := service.NewVoucherService(voucherRepo, voucherOrderRepo, slogLogger)
 	voucherHandler := handler.NewVoucherHandler(voucherService)
 	engine := router.NewRouter(loginHandler, handlerShopService, voucherHandler)
 	messageQueue := repository.NewMessageQueue(client)
