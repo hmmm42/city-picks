@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -20,8 +21,7 @@ type OrderConsumer struct {
 
 const (
 	maxRetries        = 3
-	minIdleTime       = 1 * time.Minute
-	checkIdleInterval = 5 * time.Minute
+	checkIdleInterval = 2 * time.Second
 )
 
 func NewOrderConsumer(mq repository.MessageQueue, svc service.VoucherService) *OrderConsumer {
@@ -40,12 +40,55 @@ func (c *OrderConsumer) Start(ctx context.Context) {
 
 	slog.Info("Order consumer started", "consumer", c.consumerName)
 
-	go c.processNewMsgs(ctx)
-
-	go c.recoverAndHandleDeadLetters(ctx)
+	go c.ConsumeMessages(ctx)
 }
 
-func (c *OrderConsumer) handleMessage(ctx context.Context, msg redis.XMessage) error {
+func (c *OrderConsumer) ConsumeMessages(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("Order consumer stopped", "consumer", c.consumerName)
+			return
+		default:
+			msgs, err := c.mq.ReadPendingMessages(ctx, c.consumerName)
+			if err != nil {
+				slog.Error("failed to read pending messages", "err", err)
+				time.Sleep(checkIdleInterval) // 避免错误循环
+				continue
+			}
+			if len(msgs) == 0 {
+				//time.Sleep(checkIdleInterval) // 没有消息时稍作等待
+				continue
+			}
+
+			for _, msg := range msgs {
+				var retryCount int
+				if count, ok := msg.Values["retry_count"].(string); ok {
+					retryCount, _ = strconv.Atoi(count)
+				}
+
+				if retryCount >= maxRetries {
+					slog.Warn("Message has reached max retries, moving to DLQ", "messageID", msg.ID, "retryCount", retryCount)
+					c.moveToDLQ(ctx, msg, fmt.Errorf("reached max retries: (%d)", retryCount))
+					continue
+				}
+
+				if err = c.handleOrderMsg(ctx, msg); err != nil {
+					slog.Error("failed to handle order message, requeueing", "messageID", msg.ID, "error", err)
+					c.requeueMessage(ctx, msg, retryCount+1)
+					continue
+				}
+
+				if err = c.mq.Ack(ctx, repository.OrderStreamKey, repository.OrderGroup, msg.ID); err != nil {
+					slog.Error("failed to ACK message", "err", err, "messageID", msg.ID)
+					// 如果 ACK 失败，我们选择不重试，可能是因为消息已经被处理过了
+				}
+			}
+		}
+	}
+}
+
+func (c *OrderConsumer) handleOrderMsg(ctx context.Context, msg redis.XMessage) error {
 	//slog.Debug("Received message", "messageID", msg.ID, "values", msg.Values)
 	voucherID, _ := strconv.ParseUint(msg.Values["voucherID"].(string), 10, 64)
 	userID, _ := strconv.ParseUint(msg.Values["userID"].(string), 10, 64)
@@ -57,69 +100,81 @@ func (c *OrderConsumer) handleMessage(ctx context.Context, msg redis.XMessage) e
 		UserID:    userID,
 	}
 
-	if err := c.voucherService.CreateVoucherOrderDB(ctx, order); err != nil {
-		slog.Error("failed to create voucher order", "err", err, "orderID", order.ID, "voucherID", voucherID, "userID", userID)
-		return err
+	return c.voucherService.CreateVoucherOrderDB(ctx, order)
+}
+
+//func (c *OrderConsumer) processNewMsgs(ctx context.Context) {
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			slog.Info("Order consumer stopped", "consumer", c.consumerName)
+//			return
+//		default:
+//			messages, err := c.mq.ReadPendingMessages(ctx, c.consumerName)
+//			if err != nil {
+//				slog.Error("failed to read pending messages", "err", err)
+//				time.Sleep(1 * time.Second) // 避免错误循环
+//				continue
+//			}
+//			if len(messages) == 0 {
+//				continue
+//			}
+//			for _, msg := range messages {
+//				if err = c.handleOrderMsg(ctx, msg); err != nil {
+//					slog.Error("failed to handle new message, will be retried later")
+//				}
+//			}
+//		}
+//	}
+//}
+//
+//func (c *OrderConsumer) recoverAndHandleDeadLetters(ctx context.Context) {
+//	ticker := time.NewTicker(checkIdleInterval)
+//	defer ticker.Stop()
+//
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			slog.Info("Order consumer stopped", "consumer", c.consumerName)
+//			return
+//		case <-ticker.C:
+//			claimedMessages, err := c.mq.ClaimMessage(ctx, c.consumerName, minIdleTime, 10)
+//			if err != nil {
+//				slog.Error("failed to claim messages", "err", err)
+//				continue
+//			}
+//			if len(claimedMessages) == 0 {
+//				continue
+//			}
+//			slog.Info("Claimed messages", "count", len(claimedMessages))
+//			for _, msg := range claimedMessages {
+//				if err = c.handleOrderMsg(ctx, msg); err != nil {
+//					slog.Error("failed to handle message", "err", err)
+//
+//				}
+//			}
+//		}
+//	}
+//}
+
+func (c *OrderConsumer) requeueMessage(ctx context.Context, msg redis.XMessage, newRetryCount int) {
+	requeueValues := make(map[string]any)
+	for k, v := range msg.Values {
+		requeueValues[k] = v
+	}
+	// 更新或添加重试次数字段
+	requeueValues["retry_count"] = strconv.Itoa(newRetryCount)
+
+	// 将新消息添加到流的末尾
+	if _, err := c.mq.AddToStream(ctx, repository.OrderStreamKey, requeueValues); err != nil {
+		slog.Error("failed to requeue message", "err", err, "originalMessageID", msg.ID)
+		// 如果重入队列失败，我们选择不ACK原消息，让它被其他消费者认领，这是降级策略
+		return
 	}
 
+	// 确认原消息，将其从PEL中移除
 	if err := c.mq.Ack(ctx, repository.OrderStreamKey, repository.OrderGroup, msg.ID); err != nil {
-		slog.Error("failed to acknowledge message", "err", err, "messageID", msg.ID)
-		return err
-	}
-	return nil
-}
-
-func (c *OrderConsumer) processNewMsgs(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("Order consumer stopped", "consumer", c.consumerName)
-			return
-		default:
-			messages, err := c.mq.ReadPendingMessages(ctx, c.consumerName)
-			if err != nil {
-				slog.Error("failed to read pending messages", "err", err)
-				time.Sleep(1 * time.Second) // 避免错误循环
-				continue
-			}
-			if len(messages) == 0 {
-				continue
-			}
-			for _, msg := range messages {
-				if err = c.handleMessage(ctx, msg); err != nil {
-					slog.Error("failed to handle new message, will be retried later")
-				}
-			}
-		}
-	}
-}
-
-func (c *OrderConsumer) recoverAndHandleDeadLetters(ctx context.Context) {
-	ticker := time.NewTicker(checkIdleInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("Order consumer stopped", "consumer", c.consumerName)
-			return
-		case <-ticker.C:
-			claimedMessages, err := c.mq.ClaimMessage(ctx, c.consumerName, minIdleTime, 10)
-			if err != nil {
-				slog.Error("failed to claim messages", "err", err)
-				continue
-			}
-			if len(claimedMessages) == 0 {
-				continue
-			}
-			slog.Info("Claimed messages", "count", len(claimedMessages))
-			for _, msg := range claimedMessages {
-				if err = c.handleMessage(ctx, msg); err != nil {
-					slog.Error("failed to handle message", "err", err)
-
-				}
-			}
-		}
+		slog.Error("failed to ACK message after requeueing", "err", err, "messageID", msg.ID)
 	}
 }
 
@@ -140,7 +195,7 @@ func (c *OrderConsumer) moveToDLQ(ctx context.Context, msg redis.XMessage, proce
 	// 写入死信队列
 	if _, err := c.mq.AddToStream(ctx, repository.DeadLetterStreamKey, dlqValues); err != nil {
 		slog.Error("failed to add message to DLQ", "err", err, "originalMessageID", msg.ID)
-		return // 如果连DLQ都失败，只能放弃并记录日志
+		// 如果连DLQ都失败，还是要尝试ACK原消息，防止阻塞
 	}
 
 	// 从主队列中 ACK，移除该消息

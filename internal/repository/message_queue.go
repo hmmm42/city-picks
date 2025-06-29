@@ -21,7 +21,6 @@ type MessageQueue interface {
 	CreateGroup(ctx context.Context) error
 	ReadPendingMessages(ctx context.Context, consumerName string) ([]redis.XMessage, error)
 	Ack(ctx context.Context, streamKey, groupName, msgID string) error
-	ClaimMessage(ctx context.Context, consumerName string, minIdleTime time.Duration, count int64) ([]redis.XMessage, error)
 }
 
 type messageQueue struct {
